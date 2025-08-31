@@ -1,5 +1,5 @@
 # retail_ml
-![](retail_ml.pdf)
+![](retail_ml.png)
 
 ## Grok Assist
 Price Elasticity
