@@ -10,11 +10,8 @@ from sklearn.preprocessing import StandardScaler
 df = pd.read_csv('Competition_Data.csv')
 
 def clean_dataset(df):
-	df = df.drop(['Index', 'Competition_Price'], axis=1)
-	df = df.drop_duplicates(subset=[
-		'Fiscal_Week_ID', 'Store_ID',
-		'Item_ID', 'Price', 'Item_Quantity',
-		'Sales_Amount_No_Discount', 'Sales_Amount']).reset_index(drop=True)
+	df = df.drop(['Index'], axis=1)
+	df = df.drop_duplicates(subset="Price")
 	return df
 
 def group(df, store_id: str, item_id: str):
@@ -24,6 +21,54 @@ def group(df, store_id: str, item_id: str):
 	    	print(f"Group: {name}")
 	    	print(group)
 	    	print()
+
+def get_seasonality(fiscal_week_id):
+    week = int(fiscal_week_id.split('-')[1])
+    
+    if week in range(1, 9) or week in range(48, 53):
+        return 'Winter'
+    elif week in range(9, 22):
+        return 'Spring'
+    elif week in range(22, 35):
+        return 'Summer'
+    else:
+        return 'Fall'
+
+def get_price_category(price):
+    if price < 130:
+        return 'Low'
+    elif 130 <= price < 135:
+        return 'Medium'
+    else:  # price >= 135
+        return 'High'
+
+def calculate_ped(df):
+	# PED = % change in demand / % change in price
+
+	# Percentage change in price and quantity
+	df['PED'] = df.groupby(['Store_ID', 'Item_ID'])['Item_Quantity'].pct_change() / \
+					df.groupby(['Store_ID', 'Item_ID'])['Price'].pct_change()
+
+	df['PED'] = df['PED'].replace(float('nan'), 0.0)
+
+	ped_summary = df['PED'].describe()
+	return df
+
+def prepare_dataset(df):
+	df['Seasonality'] = df['Fiscal_Week_ID'].apply(get_seasonality)
+	df['Category'] = df['Price'].apply(get_price_category)
+	df['Discount_Percentage'] = df.apply(
+	    lambda row: ((row['Competition_Price'] - row['Price']) / row['Competition_Price'] * 100)
+	    if row['Competition_Price'] > row['Price'] and row['Competition_Price'] > 0 else 0,
+	    axis=1
+	)
+	df['Discount_Percentage'] = df['Discount_Percentage'].round(2)
+	df['Sales_Amount'] = df.apply(
+		lambda row: (row['Price'] * row['Item_Quantity']),
+		axis=1
+	)
+	df = calculate_ped(df)
+	return df
 
 # def plot():
 # 	# df['Quantity_Change'] = df.groupby(['Store_ID', 'Item_ID'])['Item_Quantity']	
@@ -36,11 +81,12 @@ def group(df, store_id: str, item_id: str):
 # 	# plt.savefig('./index_vs_sales_amount.png')
 # 	# plt.close()
 
-#pd.set_option('display.max_columns', None)
+pd.set_option('display.max_columns', None)
 
 df = clean_dataset(df)
+df = prepare_dataset(df)
 print(df)
-group(df, 'store_162', 'item_743')
+#group(df, 'store_162', 'item_743')
 #plot()
 
 #    Index Fiscal_Week_ID   Store_ID   Item_ID   Price  Item_Quantity	Sales_Amount_No_Discount	Sales_Amount 	Competition_Price
@@ -49,28 +95,6 @@ group(df, 'store_162', 'item_743')
 # 2      2        2019-11  store_459  item_526  134.49            435   				4716.74 		11272.59 			278.03
 # 3      3        2019-11  store_459  item_526  134.49            435   				4716.74 		11272.59 			222.66
 # 4      4        2019-11  store_459  item_526  134.49            435 					4716.74 		11272.59 			195.32
-
-def calculate_ped():
-	# PED = % change in demand / % change in price
-
-	# Percentage change in price and quantity
-	df['Price_Change'] = df.groupby(['Store_ID', 'Item_ID'])['Price'].pct_change()
-	df['Quantity_Change'] = df.groupby(['Store_ID', 'Item_ID'])['Item_Quantity'].pct_change()
-
-	print(f"\nPrice_Change:{df['Price_Change'].describe()}")
-	print(f"\nQuantity_Change:{df['Quantity_Change'].describe()}")
-
-	# PED
-	df['PED'] = df['Quantity_Change'] / df['Price_Change']
-
-	df.replace([float('inf'), -float('inf')], float('nan'), inplace=True)
-	df.dropna(subset=['PED'], inplace=True)
-
-	ped_summary = df['PED'].describe()
-
-	print(ped_summary)
-
-#calculate_ped()
 
 def prepare_feature():
 	# Encoding
@@ -92,25 +116,25 @@ def prepare_feature():
 
 	return X_scaled, y
 
-# Prepare feature
-X, y = prepare_feature()
+# # Prepare feature
+# X, y = prepare_feature()
 
-# Split set
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# # Split set
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Train
-model = LinearRegression()
-model.fit(X_train, y_train)
+# # Train
+# model = LinearRegression()
+# model.fit(X_train, y_train)
 
-print("Done training..")
+# print("Done training..")
 
-# Predict
-y_pred = model.predict(X_test)
+# # Predict
+# y_pred = model.predict(X_test)
 
-# Evaluate
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-print(f"RMSE (log_quantity): {rmse:.4f}")
+# # Evaluate
+# rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+# print(f"RMSE (log_quantity): {rmse:.4f}")
 
-# PED
-ped = model.coef_[0]
-print(f"Estimated PED (from log_price coefficient): {ped:.4f}")
+# # PED
+# ped = model.coef_[0]
+# print(f"Estimated PED (from log_price coefficient): {ped:.4f}")
